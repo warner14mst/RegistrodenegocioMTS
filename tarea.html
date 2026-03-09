@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calendario de clases pendientes</title>
+    <style>
+        /* ================= CSS (Estilos - Sin cambios) ================= */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        h1 {
+            color: #2b7a78;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            text-align: center;
+            margin-bottom: 30px;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+        }
+
+        .form-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        input {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 16px;
+            outline: none;
+        }
+
+        input:focus {
+            border-color: #3aafa9;
+        }
+
+        .btn-add {
+            padding: 10px 20px;
+            background-color: #3aafa9;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .btn-add:hover {
+            background-color: #2b7a78;
+        }
+
+        table {
+            width: 100%;
+            max-width: 800px;
+            background: white;
+            border-collapse: collapse;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        th, td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background-color: #def2f1;
+            color: #17252a;
+            font-weight: bold;
+        }
+
+        tr:hover {
+            background-color: #f1f1f1;
+        }
+
+        .btn-estado, .btn-borrar {
+            padding: 8px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.3s;
+        }
+
+        .btn-estado {
+            background-color: #f39c12; 
+            color: white;
+        }
+
+        .btn-estado.completada {
+            background-color: #27ae60; 
+        }
+
+        .btn-borrar {
+            background-color: #e74c3c; 
+            color: white;
+        }
+
+        .btn-borrar:hover {
+            background-color: #c0392b;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Calendario de Clases Pendientes</h1>
+
+    <form class="form-container" id="formularioClases">
+        <input type="text" id="materia" placeholder="Materia" required>
+        <input type="text" id="nombre" placeholder="Nombre de la tarea" required>
+        <input type="text" id="unidad" placeholder="Unidad / Tema" required>
+        <button type="submit" class="btn-add">Agregar Tarea</button>
+    </form>
+
+    <table id="tablaTareas">
+        <thead>
+            <tr>
+                <th>Materia</th>
+                <th>Nombre</th>
+                <th>Unidad</th>
+                <th>Estado</th>
+                <th>Acción</th>
+            </tr>
+        </thead>
+        <tbody>
+            </tbody>
+    </table>
+
+    <script type="module">
+        // 1. Importar Firebase desde internet (CDN) para que funcione en un solo archivo
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+        import { getDatabase, ref, push, onValue, remove, update } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-database.js";
+
+        // 2. Tu configuración de Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyCvrSjcCEjC85zRdoa70qxbl6mB5mZCqfM",
+            authDomain: "diario-741c0.firebaseapp.com",
+            databaseURL: "https://diario-741c0-default-rtdb.firebaseio.com",
+            projectId: "diario-741c0",
+            storageBucket: "diario-741c0.firebasestorage.app",
+            messagingSenderId: "467452461317",
+            appId: "1:467452461317:web:b24d63f2621babfeb9376c",
+            measurementId: "G-8F4G4GM7X2"
+        };
+
+        // 3. Inicializar la aplicación y la base de datos en tiempo real
+        const app = initializeApp(firebaseConfig);
+        const database = getDatabase(app);
+        const tareasRef = ref(database, 'tareas'); // 'tareas' será el nombre de tu tabla en la base de datos
+
+        // Capturamos elementos de la pantalla
+        const formulario = document.getElementById('formularioClases');
+        const cuerpoTabla = document.querySelector('#tablaTareas tbody');
+
+        // --- FUNCION 1: AGREGAR a Firebase ---
+        formulario.addEventListener('submit', function(evento) {
+            evento.preventDefault();
+            
+            // Creamos un nuevo registro en la base de datos
+            push(tareasRef, {
+                materia: document.getElementById('materia').value,
+                nombre: document.getElementById('nombre').value,
+                unidad: document.getElementById('unidad').value,
+                estado: 'Pendiente' // Estado inicial
+            });
+
+            formulario.reset();
+        });
+
+        // --- FUNCION 2: LEER de Firebase en tiempo real ---
+        onValue(tareasRef, (snapshot) => {
+            cuerpoTabla.innerHTML = ''; // Limpiamos la tabla visual para no duplicar
+            const datos = snapshot.val();
+
+            if (datos) {
+                // Recorremos todo lo que hay en la base de datos
+                Object.keys(datos).forEach((idFirebase) => {
+                    const tarea = datos[idFirebase];
+                    const fila = document.createElement('tr');
+
+                    // Definimos colores basados en el estado
+                    const esCompletada = tarea.estado === 'Completada';
+                    const claseBoton = esCompletada ? 'btn-estado completada' : 'btn-estado';
+
+                    fila.innerHTML = `
+                        <td>${tarea.materia}</td>
+                        <td>${tarea.nombre}</td>
+                        <td>${tarea.unidad}</td>
+                        <td><button class="${claseBoton}">${tarea.estado}</button></td>
+                        <td><button class="btn-borrar">Borrar</button></td>
+                    `;
+
+                    // --- FUNCION 3: ACTUALIZAR estado en Firebase ---
+                    const btnEstado = fila.querySelector('.btn-estado');
+                    btnEstado.addEventListener('click', function() {
+                        const nuevoEstado = tarea.estado === 'Pendiente' ? 'Completada' : 'Pendiente';
+                        update(ref(database, 'tareas/' + idFirebase), { estado: nuevoEstado });
+                    });
+
+                    // --- FUNCION 4: BORRAR de Firebase ---
+                    const btnBorrar = fila.querySelector('.btn-borrar');
+                    btnBorrar.addEventListener('click', function() {
+                        if(confirm('¿Seguro que deseas borrar esta tarea?')) {
+                            remove(ref(database, 'tareas/' + idFirebase));
+                        }
+                    });
+
+                    cuerpoTabla.appendChild(fila);
+                });
+            }
+        });
+    </script>
+</body>
+</html>
