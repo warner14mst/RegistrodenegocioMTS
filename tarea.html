@@ -66,7 +66,7 @@
 
         table {
             width: 100%;
-            max-width: 800px;
+            max-width: 900px;
             background: white;
             border-collapse: collapse;
             box-shadow: 0 4px 8px rgba(0,0,0,0.1);
@@ -123,18 +123,22 @@
     <h1>Calendario de Clases Pendientes</h1>
 
     <form class="form-container" id="formularioClases">
+        <input type="text" id="nombrePersona" placeholder="Nombre" required>
         <input type="text" id="materia" placeholder="Materia" required>
         <input type="text" id="nombre" placeholder="Nombre de la tarea" required>
         <input type="text" id="unidad" placeholder="Unidad / Tema" required>
+        <input type="date" id="fechaVencimiento" required>
         <button type="submit" class="btn-add">Agregar Tarea</button>
     </form>
 
     <table id="tablaTareas">
         <thead>
             <tr>
-                <th>Materia</th>
                 <th>Nombre</th>
+                <th>Materia</th>
+                <th>Tarea</th>
                 <th>Unidad</th>
+                <th>Vencimiento</th>
                 <th>Estado</th>
                 <th>Acción</th>
             </tr>
@@ -144,11 +148,9 @@
     </table>
 
     <script type="module">
-        // 1. Importar Firebase desde internet (CDN) para que funcione en un solo archivo
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
         import { getDatabase, ref, push, onValue, remove, update } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-database.js";
 
-        // 2. Tu configuración de Firebase
         const firebaseConfig = {
             apiKey: "AIzaSyCvrSjcCEjC85zRdoa70qxbl6mB5mZCqfM",
             authDomain: "diario-741c0.firebaseapp.com",
@@ -160,61 +162,90 @@
             measurementId: "G-8F4G4GM7X2"
         };
 
-        // 3. Inicializar la aplicación y la base de datos en tiempo real
         const app = initializeApp(firebaseConfig);
         const database = getDatabase(app);
-        const tareasRef = ref(database, 'tareas'); // 'tareas' será el nombre de tu tabla en la base de datos
+        const tareasRef = ref(database, 'tareas');
 
-        // Capturamos elementos de la pantalla
         const formulario = document.getElementById('formularioClases');
         const cuerpoTabla = document.querySelector('#tablaTareas tbody');
+        
+        const alertasMostradas = new Set(); 
 
-        // --- FUNCION 1: AGREGAR a Firebase ---
         formulario.addEventListener('submit', function(evento) {
             evento.preventDefault();
             
-            // Creamos un nuevo registro en la base de datos
             push(tareasRef, {
+                nombrePersona: document.getElementById('nombrePersona').value,
                 materia: document.getElementById('materia').value,
                 nombre: document.getElementById('nombre').value,
                 unidad: document.getElementById('unidad').value,
-                estado: 'Pendiente' // Estado inicial
+                fechaVencimiento: document.getElementById('fechaVencimiento').value, 
+                estado: 'Pendiente'
             });
 
             formulario.reset();
         });
 
-        // --- FUNCION 2: LEER de Firebase en tiempo real ---
         onValue(tareasRef, (snapshot) => {
-            cuerpoTabla.innerHTML = ''; // Limpiamos la tabla visual para no duplicar
+            cuerpoTabla.innerHTML = ''; 
             const datos = snapshot.val();
 
+            const hoy = new Date();
+            hoy.setHours(0, 0, 0, 0);
+
             if (datos) {
-                // Recorremos todo lo que hay en la base de datos
                 Object.keys(datos).forEach((idFirebase) => {
                     const tarea = datos[idFirebase];
                     const fila = document.createElement('tr');
 
-                    // Definimos colores basados en el estado
                     const esCompletada = tarea.estado === 'Completada';
                     const claseBoton = esCompletada ? 'btn-estado completada' : 'btn-estado';
 
+                    // --- NUEVA LÓGICA DE COLORES EXACTA ---
+                    let colorFila = '';
+                    
+                    if (!esCompletada && tarea.fechaVencimiento) {
+                        const fechaVenc = new Date(tarea.fechaVencimiento + "T00:00:00");
+                        const diffTime = fechaVenc - hoy;
+                        const diasRestantes = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                        if (diasRestantes > 5) {
+                            colorFila = '#d0ebff'; // Azul pastel (más de 5 días)
+                        } else if (diasRestantes > 1 && diasRestantes <= 5) {
+                            colorFila = '#d3f9d8'; // Verde pastel (más de 1 día, hasta 5)
+                        } else if (diasRestantes === 1) {
+                            colorFila = '#ffe3e3'; // Rojo pastel (Falta exactamente 1 día)
+                            
+                            // Alerta de 1 día
+                            if (!alertasMostradas.has(idFirebase)) {
+                                alert(`¡ALERTA! Falta solo 1 día para que venza la tarea de ${tarea.materia} (${tarea.nombre}) de ${tarea.nombrePersona || 'N/A'}`);
+                                alertasMostradas.add(idFirebase);
+                            }
+                        } else if (diasRestantes <= 0) {
+                            colorFila = '#ffc9c9'; // Rojo un poco más intenso (Vence hoy o ya venció)
+                        }
+                    }
+
+                    if (colorFila !== '') {
+                        fila.style.backgroundColor = colorFila;
+                    }
+
                     fila.innerHTML = `
+                        <td>${tarea.nombrePersona || 'N/A'}</td>
                         <td>${tarea.materia}</td>
                         <td>${tarea.nombre}</td>
                         <td>${tarea.unidad}</td>
+                        <td>${tarea.fechaVencimiento || 'Sin fecha'}</td>
                         <td><button class="${claseBoton}">${tarea.estado}</button></td>
                         <td><button class="btn-borrar">Borrar</button></td>
                     `;
 
-                    // --- FUNCION 3: ACTUALIZAR estado en Firebase ---
                     const btnEstado = fila.querySelector('.btn-estado');
                     btnEstado.addEventListener('click', function() {
                         const nuevoEstado = tarea.estado === 'Pendiente' ? 'Completada' : 'Pendiente';
                         update(ref(database, 'tareas/' + idFirebase), { estado: nuevoEstado });
                     });
 
-                    // --- FUNCION 4: BORRAR de Firebase ---
                     const btnBorrar = fila.querySelector('.btn-borrar');
                     btnBorrar.addEventListener('click', function() {
                         if(confirm('¿Seguro que deseas borrar esta tarea?')) {
