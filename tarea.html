@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Calendario de clases pendientes</title>
     <style>
-        /* ================= CSS (Estilos - Sin cambios) ================= */
+        /* ================= CSS (Estilos) ================= */
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background-color: #f4f7f6;
@@ -22,7 +22,6 @@
             letter-spacing: 1px;
             text-align: center;
             margin-bottom: 30px;
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
         }
 
         .form-container {
@@ -41,12 +40,8 @@
             padding: 10px;
             border: 1px solid #ccc;
             border-radius: 4px;
-            font-size: 16px;
+            font-size: 14px;
             outline: none;
-        }
-
-        input:focus {
-            border-color: #3aafa9;
         }
 
         .btn-add {
@@ -55,27 +50,21 @@
             color: white;
             border: none;
             border-radius: 4px;
-            font-size: 16px;
             cursor: pointer;
-            transition: background 0.3s;
-        }
-
-        .btn-add:hover {
-            background-color: #2b7a78;
+            font-weight: bold;
         }
 
         table {
             width: 100%;
-            max-width: 900px;
+            max-width: 950px;
             background: white;
             border-collapse: collapse;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
             border-radius: 8px;
             overflow: hidden;
         }
 
         th, td {
-            padding: 15px;
+            padding: 12px;
             text-align: left;
             border-bottom: 1px solid #ddd;
         }
@@ -83,11 +72,6 @@
         th {
             background-color: #def2f1;
             color: #17252a;
-            font-weight: bold;
-        }
-
-        tr:hover {
-            background-color: #f1f1f1;
         }
 
         .btn-estado, .btn-borrar {
@@ -96,26 +80,11 @@
             border-radius: 4px;
             cursor: pointer;
             font-weight: bold;
-            transition: 0.3s;
         }
 
-        .btn-estado {
-            background-color: #f39c12; 
-            color: white;
-        }
-
-        .btn-estado.completada {
-            background-color: #27ae60; 
-        }
-
-        .btn-borrar {
-            background-color: #e74c3c; 
-            color: white;
-        }
-
-        .btn-borrar:hover {
-            background-color: #c0392b;
-        }
+        .btn-estado { background-color: #f39c12; color: white; }
+        .btn-estado.completada { background-color: #27ae60; }
+        .btn-borrar { background-color: #e74c3c; color: white; }
     </style>
 </head>
 <body>
@@ -125,10 +94,10 @@
     <form class="form-container" id="formularioClases">
         <input type="text" id="nombrePersona" placeholder="Nombre" required>
         <input type="text" id="materia" placeholder="Materia" required>
-        <input type="text" id="nombre" placeholder="Nombre de la tarea" required>
-        <input type="text" id="unidad" placeholder="Unidad / Tema" required>
-        <input type="date" id="fechaVencimiento" required>
-        <button type="submit" class="btn-add">Agregar Tarea</button>
+        <input type="text" id="nombre" placeholder="Tarea" required>
+        <input type="text" id="unidad" placeholder="Unidad" required>
+        <input type="date" id="fechaSeleccionada" required>
+        <button type="submit" class="btn-add">Agregar</button>
     </form>
 
     <table id="tablaTareas">
@@ -138,13 +107,12 @@
                 <th>Materia</th>
                 <th>Tarea</th>
                 <th>Unidad</th>
-                <th>Vencimiento</th>
+                <th>Tiempo Restante</th>
                 <th>Estado</th>
                 <th>Acción</th>
             </tr>
         </thead>
-        <tbody>
-            </tbody>
+        <tbody></tbody>
     </table>
 
     <script type="module">
@@ -165,93 +133,75 @@
         const app = initializeApp(firebaseConfig);
         const database = getDatabase(app);
         const tareasRef = ref(database, 'tareas');
-
-        const formulario = document.getElementById('formularioClases');
         const cuerpoTabla = document.querySelector('#tablaTareas tbody');
-        
-        const alertasMostradas = new Set(); 
+        const alertasMostradas = new Set();
 
-        formulario.addEventListener('submit', function(evento) {
-            evento.preventDefault();
-            
+        // Agregar tarea calculando días
+        document.getElementById('formularioClases').addEventListener('submit', (e) => {
+            e.preventDefault();
             push(tareasRef, {
                 nombrePersona: document.getElementById('nombrePersona').value,
                 materia: document.getElementById('materia').value,
                 nombre: document.getElementById('nombre').value,
                 unidad: document.getElementById('unidad').value,
-                fechaVencimiento: document.getElementById('fechaVencimiento').value, 
+                fechaLimite: document.getElementById('fechaSeleccionada').value,
                 estado: 'Pendiente'
             });
-
-            formulario.reset();
+            e.target.reset();
         });
 
         onValue(tareasRef, (snapshot) => {
-            cuerpoTabla.innerHTML = ''; 
-            const datos = snapshot.val();
-
+            cuerpoTabla.innerHTML = '';
             const hoy = new Date();
             hoy.setHours(0, 0, 0, 0);
 
-            if (datos) {
-                Object.keys(datos).forEach((idFirebase) => {
-                    const tarea = datos[idFirebase];
+            if (snapshot.exists()) {
+                const datos = snapshot.val();
+                Object.keys(datos).forEach((id) => {
+                    const t = datos[id];
                     const fila = document.createElement('tr');
-
-                    const esCompletada = tarea.estado === 'Completada';
-                    const claseBoton = esCompletada ? 'btn-estado completada' : 'btn-estado';
-
-                    // --- NUEVA LÓGICA DE COLORES EXACTA ---
-                    let colorFila = '';
                     
-                    if (!esCompletada && tarea.fechaVencimiento) {
-                        const fechaVenc = new Date(tarea.fechaVencimiento + "T00:00:00");
-                        const diffTime = fechaVenc - hoy;
-                        const diasRestantes = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    // Cálculo de días restantes
+                    const fechaVenc = new Date(t.fechaLimite + "T00:00:00");
+                    const diff = fechaVenc - hoy;
+                    const dias = Math.ceil(diff / (1000 * 60 * 60 * 24));
 
-                        if (diasRestantes > 5) {
-                            colorFila = '#d0ebff'; // Azul pastel (más de 5 días)
-                        } else if (diasRestantes > 1 && diasRestantes <= 5) {
-                            colorFila = '#d3f9d8'; // Verde pastel (más de 1 día, hasta 5)
-                        } else if (diasRestantes === 1) {
-                            colorFila = '#ffe3e3'; // Rojo pastel (Falta exactamente 1 día)
-                            
-                            // Alerta de 1 día
-                            if (!alertasMostradas.has(idFirebase)) {
-                                alert(`¡ALERTA! Falta solo 1 día para que venza la tarea de ${tarea.materia} (${tarea.nombre}) de ${tarea.nombrePersona || 'N/A'}`);
-                                alertasMostradas.add(idFirebase);
+                    let textoDias = dias > 0 ? `Faltan ${dias} días` : (dias === 0 ? "Vence hoy" : "Vencida");
+                    let color = "";
+
+                    if (t.estado !== 'Completada') {
+                        if (dias > 5) {
+                            color = "#d0ebff"; // Azul
+                        } else if (dias > 1) {
+                            color = "#d3f9d8"; // Verde
+                        } else {
+                            color = "#ffc9c9"; // Rojo (1 día o menos)
+                            if (dias === 1 && !alertasMostradas.has(id)) {
+                                alert(`¡Atención! Falta 1 día para: ${t.nombre}`);
+                                alertasMostradas.add(id);
                             }
-                        } else if (diasRestantes <= 0) {
-                            colorFila = '#ffc9c9'; // Rojo un poco más intenso (Vence hoy o ya venció)
                         }
                     }
 
-                    if (colorFila !== '') {
-                        fila.style.backgroundColor = colorFila;
-                    }
-
+                    fila.style.backgroundColor = color;
                     fila.innerHTML = `
-                        <td>${tarea.nombrePersona || 'N/A'}</td>
-                        <td>${tarea.materia}</td>
-                        <td>${tarea.nombre}</td>
-                        <td>${tarea.unidad}</td>
-                        <td>${tarea.fechaVencimiento || 'Sin fecha'}</td>
-                        <td><button class="${claseBoton}">${tarea.estado}</button></td>
+                        <td>${t.nombrePersona}</td>
+                        <td>${t.materia}</td>
+                        <td>${t.nombre}</td>
+                        <td>${t.unidad}</td>
+                        <td><strong>${textoDias}</strong></td>
+                        <td><button class="btn-estado ${t.estado === 'Completada' ? 'completada' : ''}">${t.estado}</button></td>
                         <td><button class="btn-borrar">Borrar</button></td>
                     `;
 
-                    const btnEstado = fila.querySelector('.btn-estado');
-                    btnEstado.addEventListener('click', function() {
-                        const nuevoEstado = tarea.estado === 'Pendiente' ? 'Completada' : 'Pendiente';
-                        update(ref(database, 'tareas/' + idFirebase), { estado: nuevoEstado });
-                    });
+                    fila.querySelector('.btn-estado').onclick = () => {
+                        const nuevo = t.estado === 'Pendiente' ? 'Completada' : 'Pendiente';
+                        update(ref(database, 'tareas/' + id), { estado: nuevo });
+                    };
 
-                    const btnBorrar = fila.querySelector('.btn-borrar');
-                    btnBorrar.addEventListener('click', function() {
-                        if(confirm('¿Seguro que deseas borrar esta tarea?')) {
-                            remove(ref(database, 'tareas/' + idFirebase));
-                        }
-                    });
+                    fila.querySelector('.btn-borrar').onclick = () => {
+                        if(confirm('¿Borrar?')) remove(ref(database, 'tareas/' + id));
+                    };
 
                     cuerpoTabla.appendChild(fila);
                 });
