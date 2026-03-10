@@ -3,26 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Calendario de clases pendientes</title>
+    <title>Control de Tareas por Días</title>
     <style>
-        /* ================= CSS (Estilos) ================= */
+        /* ================= CSS ================= */
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Segoe UI', sans-serif;
             background-color: #f4f7f6;
-            color: #333;
             display: flex;
             flex-direction: column;
             align-items: center;
             padding: 20px;
         }
 
-        h1 {
-            color: #2b7a78;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            text-align: center;
-            margin-bottom: 30px;
-        }
+        h1 { color: #2b7a78; text-align: center; }
 
         .form-container {
             background: white;
@@ -41,8 +34,10 @@
             border: 1px solid #ccc;
             border-radius: 4px;
             font-size: 14px;
-            outline: none;
         }
+
+        /* Estilo especial para el input de días */
+        #diasFaltantes { width: 80px; font-weight: bold; border: 2px solid #3aafa9; }
 
         .btn-add {
             padding: 10px 20px;
@@ -69,10 +64,7 @@
             border-bottom: 1px solid #ddd;
         }
 
-        th {
-            background-color: #def2f1;
-            color: #17252a;
-        }
+        th { background-color: #def2f1; color: #17252a; }
 
         .btn-estado, .btn-borrar {
             padding: 8px 12px;
@@ -89,15 +81,15 @@
 </head>
 <body>
 
-    <h1>Calendario de Clases Pendientes</h1>
+    <h1>Calendario de Tareas Pendientes</h1>
 
     <form class="form-container" id="formularioClases">
         <input type="text" id="nombrePersona" placeholder="Nombre" required>
         <input type="text" id="materia" placeholder="Materia" required>
-        <input type="text" id="nombre" placeholder="Tarea" required>
+        <input type="text" id="nombreTarea" placeholder="Tarea" required>
         <input type="text" id="unidad" placeholder="Unidad" required>
-        <input type="date" id="fechaSeleccionada" required>
-        <button type="submit" class="btn-add">Agregar</button>
+        <input type="number" id="diasFaltantes" placeholder="Días" min="0" required>
+        <button type="submit" class="btn-add">Agregar Tarea</button>
     </form>
 
     <table id="tablaTareas">
@@ -107,7 +99,7 @@
                 <th>Materia</th>
                 <th>Tarea</th>
                 <th>Unidad</th>
-                <th>Tiempo Restante</th>
+                <th>Días Restantes</th>
                 <th>Estado</th>
                 <th>Acción</th>
             </tr>
@@ -136,15 +128,15 @@
         const cuerpoTabla = document.querySelector('#tablaTareas tbody');
         const alertasMostradas = new Set();
 
-        // Agregar tarea calculando días
+        // Guardar tarea con el número de días
         document.getElementById('formularioClases').addEventListener('submit', (e) => {
             e.preventDefault();
             push(tareasRef, {
                 nombrePersona: document.getElementById('nombrePersona').value,
                 materia: document.getElementById('materia').value,
-                nombre: document.getElementById('nombre').value,
+                nombreTarea: document.getElementById('nombreTarea').value,
                 unidad: document.getElementById('unidad').value,
-                fechaLimite: document.getElementById('fechaSeleccionada').value,
+                dias: parseInt(document.getElementById('diasFaltantes').value),
                 estado: 'Pendiente'
             });
             e.target.reset();
@@ -152,32 +144,27 @@
 
         onValue(tareasRef, (snapshot) => {
             cuerpoTabla.innerHTML = '';
-            const hoy = new Date();
-            hoy.setHours(0, 0, 0, 0);
-
             if (snapshot.exists()) {
                 const datos = snapshot.val();
                 Object.keys(datos).forEach((id) => {
                     const t = datos[id];
                     const fila = document.createElement('tr');
                     
-                    // Cálculo de días restantes
-                    const fechaVenc = new Date(t.fechaLimite + "T00:00:00");
-                    const diff = fechaVenc - hoy;
-                    const dias = Math.ceil(diff / (1000 * 60 * 60 * 24));
-
-                    let textoDias = dias > 0 ? `Faltan ${dias} días` : (dias === 0 ? "Vence hoy" : "Vencida");
+                    const numDias = parseInt(t.dias);
                     let color = "";
 
+                    // LÓGICA DE COLORES POR NÚMERO DE DÍAS
                     if (t.estado !== 'Completada') {
-                        if (dias > 5) {
-                            color = "#d0ebff"; // Azul
-                        } else if (dias > 1) {
-                            color = "#d3f9d8"; // Verde
+                        if (numDias > 5) {
+                            color = "#d0ebff"; // Azul (Más de 5 días)
+                        } else if (numDias > 1) {
+                            color = "#d3f9d8"; // Verde (Más de 1 día hasta 5)
                         } else {
                             color = "#ffc9c9"; // Rojo (1 día o menos)
-                            if (dias === 1 && !alertasMostradas.has(id)) {
-                                alert(`¡Atención! Falta 1 día para: ${t.nombre}`);
+                            
+                            // ALERTA: Si el número es exactamente 1
+                            if (numDias === 1 && !alertasMostradas.has(id)) {
+                                alert(`¡ADVERTENCIA! Falta solo 1 día para la tarea: ${t.nombreTarea}`);
                                 alertasMostradas.add(id);
                             }
                         }
@@ -187,20 +174,22 @@
                     fila.innerHTML = `
                         <td>${t.nombrePersona}</td>
                         <td>${t.materia}</td>
-                        <td>${t.nombre}</td>
+                        <td>${t.nombreTarea}</td>
                         <td>${t.unidad}</td>
-                        <td><strong>${textoDias}</strong></td>
+                        <td><strong>Faltan ${numDias} días</strong></td>
                         <td><button class="btn-estado ${t.estado === 'Completada' ? 'completada' : ''}">${t.estado}</button></td>
                         <td><button class="btn-borrar">Borrar</button></td>
                     `;
 
+                    // Botón de Estado
                     fila.querySelector('.btn-estado').onclick = () => {
                         const nuevo = t.estado === 'Pendiente' ? 'Completada' : 'Pendiente';
                         update(ref(database, 'tareas/' + id), { estado: nuevo });
                     };
 
+                    // Botón de Borrar
                     fila.querySelector('.btn-borrar').onclick = () => {
-                        if(confirm('¿Borrar?')) remove(ref(database, 'tareas/' + id));
+                        if(confirm('¿Seguro que quieres borrarla?')) remove(ref(database, 'tareas/' + id));
                     };
 
                     cuerpoTabla.appendChild(fila);
